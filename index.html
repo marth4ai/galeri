@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Full Page Image Slider with Clock, Date & Zoom Effect</title>
-
+    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
 
     <style>
@@ -192,6 +191,9 @@
             /* Tetap berada di paling depan */
             border: 1px solid rgba(252, 238, 203, 0.15);
             /* Border emas tipis transparan */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .time-display {
@@ -212,6 +214,43 @@
             opacity: 0.85;
             font-family: 'Montserrat', sans-serif;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        /* --- TOMBOL LAYAR PENUH (FULLSCREEN WIDGET) --- */
+        .fullscreen-btn {
+            background: rgba(252, 238, 203, 0.1);
+            border: 1px solid rgba(252, 238, 203, 0.3);
+            color: #fceecb;
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            margin-top: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: 'Montserrat', sans-serif;
+            transition: all 0.3s ease;
+            width: 100%;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .fullscreen-btn:hover {
+            background: rgba(252, 238, 203, 0.25);
+            box-shadow: 0 0 10px rgba(252, 238, 203, 0.2);
+            border-color: rgba(252, 238, 203, 0.6);
+        }
+
+        .fullscreen-btn svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        /* Menyembunyikan tombol fullscreen di browser TV tertentu jika diinginkan (opsional) */
+        .fullscreen-btn:active {
+            transform: scale(0.97);
         }
 
         /* --- LOADING SPINNER & ERROR STATE --- */
@@ -277,10 +316,16 @@
         </div>
     </div>
 
-    <!-- Clock Widget -->
+    <!-- Clock Widget & Fullscreen Button -->
     <div class="clock-container">
         <div id="clock" class="time-display">00:00:00</div>
         <div id="date" class="date-display">00/00/0000</div>
+        <button id="fullscreen-btn" class="fullscreen-btn" title="Aktifkan Layar Penuh">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 8V4H8M20 8V4H16M4 16V20H8M20 16V20H16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Layar Penuh
+        </button>
     </div>
 
     <!-- Swiper Slider -->
@@ -328,7 +373,38 @@
         updateDateTime();
         setInterval(updateDateTime, 1000);
 
-        // 2. Fetch Data secara Dinamis dari Google Sheets atau Fallback gallery.json
+        // 2. Tombol Layar Penuh (Fullscreen API)
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.warn(`Gagal masuk mode fullscreen: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        });
+
+        // Update UI tombol ketika status Fullscreen berubah
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                fullscreenBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 4V8H4M16 4V8H20M8 20V16H4M16 20V16H20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Keluar Layar
+                `;
+            } else {
+                fullscreenBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 8V4H8M20 8V4H16M4 16V20H8M20 16V20H16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Layar Penuh
+                `;
+            }
+        });
+
+        // 3. Fetch Data secara Dinamis dari Google Sheets atau Fallback gallery.json
         async function loadGallery() {
             const wrapper = document.getElementById('swiper-wrapper');
             const loader = document.getElementById('loader');
