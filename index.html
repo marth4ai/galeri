@@ -177,7 +177,7 @@
         <div class="loader-text" id="loader-text">Memuat Galeri...</div>
         <div class="error-message" id="error-msg">
             <h3>Gagal Memuat Galeri</h3>
-            <p>Pastikan file <code>gallery.json</code> tersedia dan berformat benar.</p>
+            <p>Pastikan koneksi internet aktif, atau konfigurasi data (Google Sheets / gallery.json) sudah benar.</p>
         </div>
     </div>
 
@@ -199,6 +199,13 @@
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 
     <script>
+        // ==================== KONFIGURASI ====================
+        // ID Google Sheet yang Anda berikan
+        const GOOGLE_SHEET_ID = "1PjAPH7mU8EbAIJnGP16yG45D90rtd9Q99NlnfAli-XM"; 
+        // Nama tab spreadsheet utama
+        const GOOGLE_SHEET_TAB_NAME = "utama"; 
+        // ====================================================
+
         // 1. Fungsi Logika Jam & Tanggal
         function updateDateTime() {
             const now = new Date();
@@ -225,7 +232,7 @@
         updateDateTime();
         setInterval(updateDateTime, 1000);
 
-        // 2. Fetch Data dari gallery.json secara Dinamis
+        // 2. Fetch Data secara Dinamis dari Google Sheets atau Fallback gallery.json
         async function loadGallery() {
             const wrapper = document.getElementById('swiper-wrapper');
             const loader = document.getElementById('loader');
@@ -234,69 +241,120 @@
             const errorMsg = document.getElementById('error-msg');
             const swiperEl = document.querySelector('.swiper');
 
+            let imagesData = [];
+
             try {
-                // Fetch data dari file JSON lokal / remote
-                const response = await fetch('gallery.json');
-                if (!response.ok) {
-                    throw new Error('Gagal mengunduh file gallery.json');
-                }
-                
-                const imagesData = await response.json();
-                
-                if (!Array.isArray(imagesData) || imagesData.length === 0) {
-                    throw new Error('Format gallery.json kosong atau tidak valid');
-                }
-
-                // Bangun elemen slide secara dinamis
-                let slidesHtml = '';
-                imagesData.forEach(item => {
-                    slidesHtml += `
-                        <div class="swiper-slide">
-                            <img src="${item.url}" alt="${item.title}">
-                            <div class="slide-content">
-                                <h1>${item.title}</h1>
-                                <p>${item.desc}</p>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                // Masukkan ke dalam DOM
-                wrapper.innerHTML = slidesHtml;
-
-                // Hilangkan loading screen dengan transisi halus
-                loader.style.opacity = '0';
-                setTimeout(() => {
-                    loader.style.visibility = 'hidden';
-                    swiperEl.classList.add('loaded');
-                }, 500);
-
-                // 3. Inisialisasi Swiper Slider setelah DOM siap sepenuhnya
-                const swiper = new Swiper('.mySwiper', {
-                    effect: 'fade',
-                    fadeEffect: {
-                        crossFade: true
-                    },
-                    loop: true, 
-                    autoplay: {
-                        delay: 6000, 
-                        disableOnInteraction: false, 
-                    },
-                    pagination: {
-                        el: '.swiper-pagination',
-                        clickable: true, 
+                // Jika ID Google Sheets diisi, prioritaskan memuat dari Google Sheets
+                if (GOOGLE_SHEET_ID && GOOGLE_SHEET_ID.trim() !== "") {
+                    loaderText.textContent = "Memuat dari Google Sheets...";
+                    
+                    let sheetUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID.trim()}/gviz/tq?tqx=out:json`;
+                    if (GOOGLE_SHEET_TAB_NAME && GOOGLE_SHEET_TAB_NAME.trim() !== "") {
+                        sheetUrl += `&sheet=${encodeURIComponent(GOOGLE_SHEET_TAB_NAME.trim())}`;
                     }
-                });
 
-            } catch (error) {
-                console.error(error);
+                    const response = await fetch(sheetUrl);
+                    if (!response.ok) throw new Error('Gagal mengambil data dari Google Sheets API');
+                    
+                    const text = await response.text();
+                    
+                    // Ekstrak JSON dari response Google Visualization API
+                    const jsonString = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+                    const parsedData = JSON.parse(jsonString);
+                    
+                    if (parsedData.table && parsedData.table.rows) {
+                        let rows = parsedData.table.rows;
+                        
+                        // Deteksi dan lewati baris header jika baris pertama bukan berisi tautan URL gambar
+                        if (rows.length > 0) {
+                            const firstRowCol1 = rows[0].c && rows[0].c[0] ? String(rows[0].c[0].v).toLowerCase() : '';
+                            if (firstRowCol1.includes('url') || !firstRowCol1.startsWith('http') && !firstRowCol1.startsWith('images/')) {
+                                rows = rows.slice(1); // Potong baris pertama (header)
+                            }
+                        }
+
+                        // Petakan data baris spreadsheet ke objek JavaScript
+                        imagesData = rows.map(row => {
+                            return {
+                                url: row.c && row.c[0] ? String(row.c[0].v).trim() : '',
+                                title: row.c && row.c[1] ? String(row.c[1].v).trim() : '',
+                                desc: row.c && row.c[2] ? String(row.c[2].v).trim() : ''
+                            };
+                        }).filter(item => item.url !== ''); // Buang baris kosong yang tidak punya URL
+                    }
+                }
+            } catch (sheetError) {
+                console.warn('Gagal memuat dari Google Sheets, menggunakan fallback gallery.json:', sheetError);
+            }
+
+            // Jika Google Sheets kosong/gagal, gunakan file "gallery.json" lokal sebagai cadangan (fallback)
+            if (imagesData.length === 0) {
+                try {
+                    loaderText.textContent = "Memuat dari gallery.json (cadangan)...";
+                    const response = await fetch('gallery.json');
+                    if (!response.ok) throw new Error('Gagal memuat gallery.json');
+                    imagesData = await response.json();
+                } catch (fallbackError) {
+                    console.error('Semua metode pemuatan data gagal:', fallbackError);
+                    spinner.style.display = 'none';
+                    loaderText.style.display = 'none';
+                    errorMsg.style.display = 'block';
+                    return;
+                }
+            }
+
+            // Validasi data akhir
+            if (!Array.isArray(imagesData) || imagesData.length === 0) {
                 spinner.style.display = 'none';
                 loaderText.style.display = 'none';
                 errorMsg.style.display = 'block';
+                return;
             }
+
+            // Bangun elemen slide secara dinamis
+            let slidesHtml = '';
+            imagesData.forEach(item => {
+                slidesHtml += `
+                    <div class="swiper-slide">
+                        <img src="${item.url}" alt="${item.title}">
+                        <div class="slide-content">
+                            <h1>${item.title}</h1>
+                            <p>${item.desc}</p>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Masukkan ke dalam DOM
+            wrapper.innerHTML = slidesHtml;
+
+            // Hilangkan loading screen dengan transisi halus
+            loader.style.opacity = '0';
+            setTimeout(() => {
+                loader.style.visibility = 'hidden';
+                swiperEl.classList.add('loaded');
+            }, 500);
+
+            // 3. Inisialisasi Swiper Slider setelah DOM terisi lengkap
+            const swiper = new Swiper('.mySwiper', {
+                effect: 'fade',
+                fadeEffect: {
+                    crossFade: true
+                },
+                loop: true, 
+                autoplay: {
+                    delay: 6000, 
+                    disableOnInteraction: false, 
+                },
+                pagination: {
+                    el: '.swiper-pagination',
+                    clickable: true, 
+                    dynamicBullets: false
+                }
+            });
         }
 
-        // Jalankan pemuatan galeri saat dokumen siap
+        // Jalankan pemuatan saat dokumen siap
         document.addEventListener('DOMContentLoaded', loadGallery);
     </script>
 </body>
