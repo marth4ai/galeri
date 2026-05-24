@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Page Image Slider with Clock, Date & Zoom Effect</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+
+    <style>
+        /* Reset dasar agar halaman benar-benar penuh tanpa scrollbar bawaan */
+        html, body {
+            position: relative;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #000;
+        }
+
+        /* Mengatur ukuran container slider agar memenuhi layar */
+        .swiper {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            opacity: 0;
+            transition: opacity 0.8s ease-in-out;
+        }
+
+        .swiper.loaded {
+            opacity: 1;
+        }
+
+        /* Mengatur setiap slide */
+        .swiper-slide {
+            position: relative;
+            text-align: center;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden; /* Penting agar gambar yang membesar tidak keluar dari frame */
+        }
+
+        /* --- EFEK ANIMASI ZOOM IN / SCALE UP --- */
+        .swiper-slide img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            /* Transisi default saat slide tidak aktif atau saat kembali normal */
+            transform: scale(1);
+            transition: transform 6s ease-out; 
+        }
+
+        /* Ketika slide menjadi aktif, gambar akan membesar perlahan */
+        .swiper-slide-active img {
+            transform: scale(1.15); /* Membesar sebesar 15% */
+        }
+
+        /* Kustomisasi Opsional: Membuat teks di atas gambar */
+        .slide-content {
+            position: absolute;
+            color: #fff;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+            z-index: 10;
+            /* Animasi tambahan agar teks muncul lembut saat slide aktif */
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 1s ease-out 0.5s;
+        }
+
+        .swiper-slide-active .slide-content {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .slide-content h1 {
+            margin: 0 0 10px;
+            font-size: 3rem;
+        }
+
+        /* Mengubah warna tombol navigasi menjadi putih agar kontras */
+        .swiper-button-next,
+        .swiper-button-prev {
+            color: #fff !important;
+        }
+
+        .swiper-pagination-bullet-active {
+            background: #fff !important;
+        }
+
+        /* --- STYLE WIDGET JAM & TANGGAL --- */
+        .clock-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.55);
+            color: #ffffff;
+            padding: 12px 24px;
+            text-align: center;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            backdrop-filter: blur(5px);
+            z-index: 999; /* Tetap berada di paling depan */
+        }
+
+        .time-display {
+            font-size: 1.8rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            line-height: 1.2;
+        }
+
+        .date-display {
+            font-size: 1rem;
+            margin-top: 4px;
+            letter-spacing: 1px;
+            opacity: 0.85;
+        }
+
+        /* --- LOADING SPINNER & ERROR STATE --- */
+        .loader-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: #fff;
+            transition: opacity 0.5s ease-out, visibility 0.5s;
+        }
+
+        .loader-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        .loader-text {
+            margin-top: 20px;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            opacity: 0.8;
+        }
+
+        .error-message {
+            color: #ff6b6b;
+            text-align: center;
+            padding: 20px;
+            max-width: 400px;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loader" class="loader-container">
+        <div class="loader-spinner" id="spinner"></div>
+        <div class="loader-text" id="loader-text">Memuat Galeri...</div>
+        <div class="error-message" id="error-msg">
+            <h3>Gagal Memuat Galeri</h3>
+            <p>Pastikan file <code>gallery.json</code> tersedia dan berformat benar.</p>
+        </div>
+    </div>
+
+    <!-- Clock Widget -->
+    <div class="clock-container">
+        <div id="clock" class="time-display">00:00:00</div>
+        <div id="date" class="date-display">00/00/0000</div>
+    </div>
+
+    <!-- Swiper Slider -->
+    <div class="swiper mySwiper">
+        <div class="swiper-wrapper" id="swiper-wrapper">
+            <!-- Slides will be loaded dynamically here -->
+        </div>
+        
+        <div class="swiper-pagination"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
+    <script>
+        // 1. Fungsi Logika Jam & Tanggal
+        function updateDateTime() {
+            const now = new Date();
+            
+            let hours = now.getHours();
+            let minutes = now.getMinutes();
+            let seconds = now.getSeconds();
+
+            hours = hours < 10 ? '0' + hours : hours;
+            minutes = minutes < 10 ? '0' + minutes : minutes;
+            seconds = seconds < 10 ? '0' + seconds : seconds;
+
+            document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+
+            let day = now.getDate();
+            let month = now.getMonth() + 1;
+            const year = now.getFullYear();
+
+            day = day < 10 ? '0' + day : day;
+            month = month < 10 ? '0' + month : month;
+
+            document.getElementById('date').textContent = `${day}/${month}/${year}`;
+        }
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
+
+        // 2. Fetch Data dari gallery.json secara Dinamis
+        async function loadGallery() {
+            const wrapper = document.getElementById('swiper-wrapper');
+            const loader = document.getElementById('loader');
+            const spinner = document.getElementById('spinner');
+            const loaderText = document.getElementById('loader-text');
+            const errorMsg = document.getElementById('error-msg');
+            const swiperEl = document.querySelector('.swiper');
+
+            try {
+                // Fetch data dari file JSON lokal / remote
+                const response = await fetch('gallery.json');
+                if (!response.ok) {
+                    throw new Error('Gagal mengunduh file gallery.json');
+                }
+                
+                const imagesData = await response.json();
+                
+                if (!Array.isArray(imagesData) || imagesData.length === 0) {
+                    throw new Error('Format gallery.json kosong atau tidak valid');
+                }
+
+                // Bangun elemen slide secara dinamis
+                let slidesHtml = '';
+                imagesData.forEach(item => {
+                    slidesHtml += `
+                        <div class="swiper-slide">
+                            <img src="${item.url}" alt="${item.title}">
+                            <div class="slide-content">
+                                <h1>${item.title}</h1>
+                                <p>${item.desc}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                // Masukkan ke dalam DOM
+                wrapper.innerHTML = slidesHtml;
+
+                // Hilangkan loading screen dengan transisi halus
+                loader.style.opacity = '0';
+                setTimeout(() => {
+                    loader.style.visibility = 'hidden';
+                    swiperEl.classList.add('loaded');
+                }, 500);
+
+                // 3. Inisialisasi Swiper Slider setelah DOM siap sepenuhnya
+                const swiper = new Swiper('.mySwiper', {
+                    effect: 'fade',
+                    fadeEffect: {
+                        crossFade: true
+                    },
+                    loop: true, 
+                    autoplay: {
+                        delay: 6000, 
+                        disableOnInteraction: false, 
+                    },
+                    pagination: {
+                        el: '.swiper-pagination',
+                        clickable: true, 
+                    }
+                });
+
+            } catch (error) {
+                console.error(error);
+                spinner.style.display = 'none';
+                loaderText.style.display = 'none';
+                errorMsg.style.display = 'block';
+            }
+        }
+
+        // Jalankan pemuatan galeri saat dokumen siap
+        document.addEventListener('DOMContentLoaded', loadGallery);
+    </script>
+</body>
+</html>
