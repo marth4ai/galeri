@@ -254,6 +254,62 @@
             transform: scale(0.97);
         }
 
+        /* --- STYLE PENGATUR WAKTU SLIDE (SLIDER SETTING) --- */
+        .settings-container {
+            width: 100%;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(252, 238, 203, 0.15);
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        .settings-container label {
+            font-size: 0.72rem;
+            color: #fceecb;
+            font-family: 'Montserrat', sans-serif;
+            opacity: 0.9;
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            letter-spacing: 0.5px;
+        }
+
+        .settings-container label span {
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        .settings-container input[type="range"] {
+            width: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(252, 238, 203, 0.2);
+            height: 4px;
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .settings-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #fceecb;
+            cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        .settings-container input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+            background: #ffffff;
+        }
+
         /* --- LOADING SPINNER & ERROR STATE --- */
         .loader-container {
             position: absolute;
@@ -317,10 +373,11 @@
         </div>
     </div>
 
-    <!-- Clock Widget & Fullscreen Button -->
+    <!-- Clock Widget, Fullscreen Button & Settings -->
     <div class="clock-container">
         <div id="clock" class="time-display">00:00:00</div>
         <div id="date" class="date-display">00/00/0000</div>
+        
         <button id="fullscreen-btn" class="fullscreen-btn" title="Aktifkan Layar Penuh">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M4 8V4H8M20 8V4H16M4 16V20H8M20 16V20H16" stroke="currentColor" stroke-width="2.5"
@@ -328,6 +385,12 @@
             </svg>
             Layar Penuh
         </button>
+
+        <!-- Slide Duration Controller (Interactive) -->
+        <div class="settings-container">
+            <label for="duration-slider">Durasi Slide: <span id="duration-val">25</span>s</label>
+            <input type="range" id="duration-slider" min="3" max="120" value="25" step="1">
+        </div>
     </div>
 
     <!-- Swiper Slider -->
@@ -347,6 +410,8 @@
         const GOOGLE_SHEET_ID = "1PjAPH7mU8EbAIJnGP16yG45D90rtd9Q99NlnfAli-XM";
         // Nama tab spreadsheet utama
         const GOOGLE_SHEET_TAB_NAME = "utama";
+        // Durasi default pergantian slide dalam milidetik (25000 ms = 25 detik)
+        const DEFAULT_SLIDE_DURATION = 25000;
         // ====================================================
 
         // 1. Fungsi Logika Jam & Tanggal
@@ -449,10 +514,19 @@
 
                         // Petakan data baris spreadsheet ke objek JavaScript
                         imagesData = rows.map(row => {
+                            let durationVal = null;
+                            if (row.c && row.c[3] && row.c[3].v !== undefined && row.c[3].v !== null) {
+                                const parsedVal = Number(row.c[3].v);
+                                if (!isNaN(parsedVal)) {
+                                    // Jika nilai < 1000, anggap satuan detik dan ubah ke milidetik
+                                    durationVal = parsedVal < 1000 ? parsedVal * 1000 : parsedVal;
+                                }
+                            }
                             return {
                                 url: row.c && row.c[0] ? String(row.c[0].v).trim() : '',
                                 title: row.c && row.c[1] ? String(row.c[1].v).trim() : '',
-                                desc: row.c && row.c[2] ? String(row.c[2].v).trim() : ''
+                                desc: row.c && row.c[2] ? String(row.c[2].v).trim() : '',
+                                duration: durationVal
                             };
                         }).filter(item => item.url !== ''); // Buang baris kosong yang tidak punya URL
                     }
@@ -467,7 +541,23 @@
                     loaderText.textContent = "Memuat dari gallery.json (cadangan)...";
                     const response = await fetch('gallery.json');
                     if (!response.ok) throw new Error('Gagal memuat gallery.json');
-                    imagesData = await response.json();
+                    const localData = await response.json();
+                    imagesData = localData.map(item => {
+                        let durationVal = null;
+                        const durationKey = item.duration || item.durasi || item.delay;
+                        if (durationKey !== undefined && durationKey !== null) {
+                            const parsedVal = Number(durationKey);
+                            if (!isNaN(parsedVal)) {
+                                durationVal = parsedVal < 1000 ? parsedVal * 1000 : parsedVal;
+                            }
+                        }
+                        return {
+                            url: item.url || '',
+                            title: item.title || '',
+                            desc: item.desc || '',
+                            duration: durationVal
+                        };
+                    });
                 } catch (fallbackError) {
                     console.error('Semua metode pemuatan data gagal:', fallbackError);
                     spinner.style.display = 'none';
@@ -488,8 +578,9 @@
             // Bangun elemen slide secara dinamis
             let slidesHtml = '';
             imagesData.forEach(item => {
+                const durationAttr = item.duration ? `data-swiper-autoplay="${item.duration}"` : '';
                 slidesHtml += `
-                    <div class="swiper-slide">
+                    <div class="swiper-slide" ${durationAttr}>
                         <img src="${item.url}" alt="${item.title}">
                         <div class="slide-content">
                             <h1>${item.title}</h1>
@@ -509,15 +600,15 @@
                 swiperEl.classList.add('loaded');
             }, 500);
 
-            // 3. Inisialisasi Swiper Slider setelah DOM terisi lengkap
-            const swiper = new Swiper('.mySwiper', {
+            // 4. Inisialisasi Swiper Slider setelah DOM terisi lengkap
+            window.swiperInstance = new Swiper('.mySwiper', {
                 effect: 'fade',
                 fadeEffect: {
                     crossFade: true
                 },
                 loop: true,
                 autoplay: {
-                    delay: 10000,
+                    delay: DEFAULT_SLIDE_DURATION,
                     disableOnInteraction: false,
                 },
                 pagination: {
@@ -526,6 +617,28 @@
                     dynamicBullets: false
                 }
             });
+
+            // Sinkronisasi Slider UI
+            const durationSlider = document.getElementById('duration-slider');
+            const durationVal = document.getElementById('duration-val');
+
+            if (durationSlider && durationVal) {
+                // Set nilai awal di UI
+                durationSlider.value = DEFAULT_SLIDE_DURATION / 1000;
+                durationVal.textContent = DEFAULT_SLIDE_DURATION / 1000;
+
+                // Event listener untuk memantau perubahan durasi secara dinamis
+                durationSlider.addEventListener('input', (e) => {
+                    const seconds = Number(e.target.value);
+                    durationVal.textContent = seconds;
+
+                    if (window.swiperInstance && window.swiperInstance.params && window.swiperInstance.params.autoplay) {
+                        window.swiperInstance.params.autoplay.delay = seconds * 1000;
+                        window.swiperInstance.autoplay.stop();
+                        window.swiperInstance.autoplay.start();
+                    }
+                });
+            }
         }
 
         // Jalankan pemuatan saat dokumen siap
