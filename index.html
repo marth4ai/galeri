@@ -73,14 +73,15 @@
             object-fit: cover;
             /* Transisi default saat slide tidak aktif atau saat kembali normal */
             transform: scale(1);
-            transition: transform 6s ease-out;
+            transition: transform 1.5s ease-in-out;
             z-index: 1;
         }
 
-        /* Ketika slide menjadi aktif, gambar akan membesar perlahan */
+        /* Ketika slide menjadi aktif, gambar akan membesar dengan sangat lambat */
         .swiper-slide-active img {
-            transform: scale(1.15);
-            /* Membesar sebesar 15% */
+            transform: scale(1.18);
+            /* Membesar sebesar 18% untuk efek kedalaman yang lebih terasa */
+            transition: transform 28s linear;
         }
 
         /* --- KUSTOMISASI TEKS DI ATAS GAMBAR (TEMA ISLAMI & KETERBACAAN TINGGI) --- */
